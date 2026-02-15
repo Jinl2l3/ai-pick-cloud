@@ -19,23 +19,23 @@
 
 ### 运行界面
 
-<img src="doc/运行图.png" alt="运行界面" width="800" style="max-width: 100%; height: auto;">
+<img src="doc/运行图.png" alt="运行界面" width="400" style="max-width: 50%; height: auto;">
 
 ### 设置页面
 
-<img src="doc/设置页面1.png" alt="设置页面1" width="800" style="max-width: 100%; height: auto;">
+<img src="doc/设置页面1.png" alt="设置页面1" width="400" style="max-width: 50%; height: auto;">
 
-<img src="doc/设置页面2.png" alt="设置页面2" width="800" style="max-width: 100%; height: auto;">
+<img src="doc/设置页面2.png" alt="设置页面2" width="400" style="max-width: 50%; height: auto;">
 
 ### 整理效果
 
 #### 整理前
 
-<img src="doc/整理前.png" alt="整理前" width="600" style="max-width: 100%; height: auto;">
+<img src="doc/整理前.png" alt="整理前" width="300" style="max-width: 50%; height: auto;">
 
 #### 整理后
 
-<img src="doc/整理后.png" alt="整理后" width="600" style="max-width: 100%; height: auto;">
+<img src="doc/整理后.png" alt="整理后" width="300" style="max-width: 50%; height: auto;">
 
 ## 安装
 

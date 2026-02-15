@@ -26,6 +26,33 @@ class MainWindow(QMainWindow):
         self.settings = load_settings()
         self.init_ui()
         self.check_ollama_status()
+        self.check_first_run()
+    
+    def check_first_run(self):
+        """检查是否是初次运行，显示引导提示"""
+        import os
+        from PyQt5.QtWidgets import QMessageBox
+        from config import CONFIG_PATH
+        
+        # 检查配置文件是否存在
+        if not os.path.exists(CONFIG_PATH):
+            # 初次运行，显示提示
+            reply = QMessageBox.information(
+                self,
+                "初次运行提示",
+                "欢迎使用大模型媒体整理大师！\n\n" 
+                "建议您先打开设置页面了解以下选项：\n" 
+                "• API 类型选择（本地 Ollama 或网络 API）\n" 
+                "• 网络 API 配置（如硅基流动）\n" 
+                "• 分类类别设置\n" 
+                "• 重命名功能配置\n" 
+                "• 网络错误重试设置\n\n" 
+                "点击'确定'后将打开设置页面。",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+            )
+            
+            if reply == QMessageBox.StandardButton.Yes:
+                self.open_settings()
         
         # 计时器相关变量
         self.timer = QTimer()
@@ -36,7 +63,7 @@ class MainWindow(QMainWindow):
         self._is_paused = False
 
     def init_ui(self):
-        self.setWindowTitle("AI 图片/视频整理工具 (网络版)")
+        self.setWindowTitle("大模型媒体整理大师")
         self.setMinimumSize(1000, 700)
 
         central_widget = QWidget()

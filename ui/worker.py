@@ -14,7 +14,12 @@ from config import (
     DEFAULT_OPERATION_MODE, DEFAULT_TIME_SOURCE, DEFAULT_FOLDER_STRUCTURE,
     DEFAULT_VIDEO_FRAME_MODE,
     DEFAULT_API_TYPE, DEFAULT_NETWORK_API_URL, DEFAULT_NETWORK_API_KEY,
-    DEFAULT_NETWORK_API_MODEL, DEFAULT_NETWORK_API_MAX_CONCURRENT
+    DEFAULT_NETWORK_API_MODEL, DEFAULT_NETWORK_API_MAX_CONCURRENT,
+    DEFAULT_RENAME_ENABLED, DEFAULT_RENAME_PROMPT,
+    DEFAULT_RENAME_INCLUDE_ORIGINAL_NAME, DEFAULT_RENAME_DATE_TYPE,
+    DEFAULT_RENAME_DATE_FORMAT,
+    DEFAULT_RETRY_ENABLED, DEFAULT_RETRY_COUNT, DEFAULT_RETRY_DELAY,
+    DEFAULT_ERROR_EXPORT_ENABLED, DEFAULT_ERROR_EXPORT_FOLDER
 )
 
 class MediaProcessorWorker(QThread):
@@ -66,6 +71,20 @@ class MediaProcessorWorker(QThread):
         self.process_images = self.settings.get("process_images", True)
         self.process_videos = self.settings.get("process_videos", True)
         
+        # Rename settings
+        self.rename_enabled = self.settings.get("rename_enabled", DEFAULT_RENAME_ENABLED)
+        self.rename_prompt = self.settings.get("rename_prompt", DEFAULT_RENAME_PROMPT)
+        self.rename_include_original = self.settings.get("rename_include_original_name", DEFAULT_RENAME_INCLUDE_ORIGINAL_NAME)
+        self.rename_date_type = self.settings.get("rename_date_type", DEFAULT_RENAME_DATE_TYPE)
+        self.rename_date_format = self.settings.get("rename_date_format", DEFAULT_RENAME_DATE_FORMAT)
+        
+        # Network retry and error export settings
+        self.retry_enabled = self.settings.get("retry_enabled", DEFAULT_RETRY_ENABLED)
+        self.retry_count = self.settings.get("retry_count", DEFAULT_RETRY_COUNT)
+        self.retry_delay = self.settings.get("retry_delay", DEFAULT_RETRY_DELAY)
+        self.error_export_enabled = self.settings.get("error_export_enabled", DEFAULT_ERROR_EXPORT_ENABLED)
+        self.error_export_folder = self.settings.get("error_export_folder", DEFAULT_ERROR_EXPORT_FOLDER)
+        
         self.base_classifier = MediaClassifier(
             api_type=self.api_type,
             ollama_url=self.ollama_url,
@@ -79,7 +98,19 @@ class MediaProcessorWorker(QThread):
             video_frame_count=self.video_frame_count,
             video_frame_mode=self.video_frame_mode,
             time_source=self.time_source,
-            folder_structure=self.folder_structure
+            folder_structure=self.folder_structure,
+            # Rename settings
+            rename_enabled=self.rename_enabled,
+            rename_prompt=self.rename_prompt,
+            rename_include_original=self.rename_include_original,
+            rename_date_type=self.rename_date_type,
+            rename_date_format=self.rename_date_format,
+            # Network retry and error export settings
+            retry_enabled=self.retry_enabled,
+            retry_count=self.retry_count,
+            retry_delay=self.retry_delay,
+            error_export_enabled=self.error_export_enabled,
+            error_export_folder=self.error_export_folder
         )
         self.scanner = FileScanner()
         self.db = Database()
@@ -124,7 +155,19 @@ class MediaProcessorWorker(QThread):
                 video_frame_count=self.video_frame_count,
                 video_frame_mode=self.video_frame_mode,
                 time_source=self.time_source,
-                folder_structure=self.folder_structure
+                folder_structure=self.folder_structure,
+                # Rename settings
+                rename_enabled=self.rename_enabled,
+                rename_prompt=self.rename_prompt,
+                rename_include_original=self.rename_include_original,
+                rename_date_type=self.rename_date_type,
+                rename_date_format=self.rename_date_format,
+                # Network retry and error export settings
+                retry_enabled=self.retry_enabled,
+                retry_count=self.retry_count,
+                retry_delay=self.retry_delay,
+                error_export_enabled=self.error_export_enabled,
+                error_export_folder=self.error_export_folder
             )
             result = classifier.process_single_file(file_path, self.target_dir)
             return result

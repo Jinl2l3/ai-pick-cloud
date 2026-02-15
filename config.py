@@ -32,6 +32,20 @@ DEFAULT_NETWORK_API_MODELS = [
     "gemini-3-pro-low"
 ]
 
+# Rename configuration
+DEFAULT_RENAME_ENABLED = False
+DEFAULT_RENAME_PROMPT = "请为这张图片生成一个简短的自然语言描述，不超过20个字符，描述图片的主要内容和特征。"
+DEFAULT_RENAME_INCLUDE_ORIGINAL_NAME = False
+DEFAULT_RENAME_DATE_TYPE = "none"  # Options: none, create, modify, access
+DEFAULT_RENAME_DATE_FORMAT = "%Y%m%d"
+
+# Network retry configuration
+DEFAULT_RETRY_ENABLED = True
+DEFAULT_RETRY_COUNT = 3
+DEFAULT_RETRY_DELAY = 2  # seconds
+DEFAULT_ERROR_EXPORT_ENABLED = True
+DEFAULT_ERROR_EXPORT_FOLDER = "error_files"
+
 CATEGORIES = [
     "人物",
     "宠物",
@@ -64,7 +78,7 @@ DEFAULT_PROMPT = """请分析这张图片，将其归类到以下类别之一：
 DEFAULT_MAX_CONCURRENT = 2
 DEFAULT_VIDEO_FRAME_COUNT = 1
 DEFAULT_VIDEO_FRAME_MODE = "middle"
-DEFAULT_OPERATION_MODE = "move"
+DEFAULT_OPERATION_MODE = "copy"
 DEFAULT_TIME_SOURCE = "earliest"
 DEFAULT_FOLDER_STRUCTURE = "category_time"
 
@@ -104,5 +118,17 @@ def get_default_settings():
         "process_images": True,
         "process_videos": True,
         "time_source": DEFAULT_TIME_SOURCE,
-        "folder_structure": DEFAULT_FOLDER_STRUCTURE
+        "folder_structure": DEFAULT_FOLDER_STRUCTURE,
+        # Rename settings
+        "rename_enabled": DEFAULT_RENAME_ENABLED,
+        "rename_prompt": DEFAULT_RENAME_PROMPT,
+        "rename_include_original_name": DEFAULT_RENAME_INCLUDE_ORIGINAL_NAME,
+        "rename_date_type": DEFAULT_RENAME_DATE_TYPE,
+        "rename_date_format": DEFAULT_RENAME_DATE_FORMAT,
+        # Network retry settings
+        "retry_enabled": DEFAULT_RETRY_ENABLED,
+        "retry_count": DEFAULT_RETRY_COUNT,
+        "retry_delay": DEFAULT_RETRY_DELAY,
+        "error_export_enabled": DEFAULT_ERROR_EXPORT_ENABLED,
+        "error_export_folder": DEFAULT_ERROR_EXPORT_FOLDER
     }

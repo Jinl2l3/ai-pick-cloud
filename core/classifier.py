@@ -1,4 +1,5 @@
 import os
+from datetime import datetime
 from typing import Optional, Dict, Any, List
 from .file_scanner import FileScanner
 from .image_processor import ImageProcessor
@@ -32,7 +33,19 @@ class MediaClassifier:
         video_frame_count: int = DEFAULT_VIDEO_FRAME_COUNT,
         video_frame_mode: str = DEFAULT_VIDEO_FRAME_MODE,
         time_source: str = DEFAULT_TIME_SOURCE,
-        folder_structure: str = DEFAULT_FOLDER_STRUCTURE
+        folder_structure: str = DEFAULT_FOLDER_STRUCTURE,
+        # Rename settings
+        rename_enabled: bool = False,
+        rename_prompt: str = None,
+        rename_include_original: bool = False,
+        rename_date_type: str = "none",
+        rename_date_format: str = "%Y%m%d",
+        # Network retry and error export settings
+        retry_enabled: bool = True,
+        retry_count: int = 3,
+        retry_delay: int = 2,
+        error_export_enabled: bool = True,
+        error_export_folder: str = "error_files"
     ):
         self.scanner = FileScanner()
         self.processor = ImageProcessor(video_frame_count=video_frame_count, video_frame_mode=video_frame_mode)
@@ -50,7 +63,11 @@ class MediaClassifier:
             api_key=network_api_key,
             model=network_api_model,
             categories=categories,
-            prompt_template=prompt_template
+            prompt_template=prompt_template,
+            # Retry settings
+            retry_enabled=retry_enabled,
+            retry_count=retry_count,
+            retry_delay=retry_delay
         )
         
         self.api_type = api_type
@@ -59,6 +76,20 @@ class MediaClassifier:
         self.network_api_url = network_api_url
         self.network_api_key = network_api_key
         self.network_api_model = network_api_model
+        
+        # Rename settings
+        self.rename_enabled = rename_enabled
+        self.rename_prompt = rename_prompt
+        self.rename_include_original = rename_include_original
+        self.rename_date_type = rename_date_type
+        self.rename_date_format = rename_date_format
+        
+        # Network retry and error export settings
+        self.retry_enabled = retry_enabled
+        self.retry_count = retry_count
+        self.retry_delay = retry_delay
+        self.error_export_enabled = error_export_enabled
+        self.error_export_folder = error_export_folder
         
         self.mover = FileMover()
         self.db = Database()
@@ -82,7 +113,19 @@ class MediaClassifier:
         video_frame_count: int = None,
         video_frame_mode: str = None,
         time_source: str = None,
-        folder_structure: str = None
+        folder_structure: str = None,
+        # Rename settings
+        rename_enabled: bool = None,
+        rename_prompt: str = None,
+        rename_include_original: bool = None,
+        rename_date_type: str = None,
+        rename_date_format: str = None,
+        # Network retry and error export settings
+        retry_enabled: bool = None,
+        retry_count: int = None,
+        retry_delay: int = None,
+        error_export_enabled: bool = None,
+        error_export_folder: str = None
     ):
         if api_type:
             self.api_type = api_type
@@ -119,6 +162,31 @@ class MediaClassifier:
             self.time_source = time_source
         if folder_structure:
             self.folder_structure = folder_structure
+        # Rename settings
+        if rename_enabled is not None:
+            self.rename_enabled = rename_enabled
+        if rename_prompt:
+            self.rename_prompt = rename_prompt
+        if rename_include_original is not None:
+            self.rename_include_original = rename_include_original
+        if rename_date_type:
+            self.rename_date_type = rename_date_type
+        if rename_date_format:
+            self.rename_date_format = rename_date_format
+        # Network retry and error export settings
+        if retry_enabled is not None:
+            self.retry_enabled = retry_enabled
+            self.network.retry_enabled = retry_enabled
+        if retry_count is not None:
+            self.retry_count = retry_count
+            self.network.retry_count = retry_count
+        if retry_delay is not None:
+            self.retry_delay = retry_delay
+            self.network.retry_delay = retry_delay
+        if error_export_enabled is not None:
+            self.error_export_enabled = error_export_enabled
+        if error_export_folder:
+            self.error_export_folder = error_export_folder
 
     def process_single_file(
         self, 
@@ -167,13 +235,51 @@ class MediaClassifier:
             category = ai_response.get("category", "其他")
             raw_response = ai_response.get("raw_response", "")
 
+            # Rename functionality
+            rename_info = None
+            if self.rename_enabled and self.rename_prompt:
+                # Generate file description using AI
+                if self.api_type == "network":
+                    # Create a temporary network client with rename prompt
+                    rename_client = NetworkClient(
+                        url=self.network_api_url,
+                        api_key=self.network_api_key,
+                        model=self.network_api_model,
+                        prompt_template=self.rename_prompt
+                    )
+                    rename_response = rename_client.analyze_image(base64_img)
+                else:
+                    # Create a temporary ollama client with rename prompt
+                    rename_client = OllamaClient(
+                        url=self.ollama_url,
+                        model=self.ollama_model,
+                        prompt_template=self.rename_prompt
+                    )
+                    rename_response = rename_client.analyze_image(base64_img)
+
+                if rename_response and rename_response.get("success"):
+                    description = rename_response.get("raw_response", "").strip()
+                    # 清理描述，确保简短
+                    description = description[:30]  # 限制长度
+                    # 清理非法字符
+                    description = "".join(c for c in description if c.isalnum() or c in "_-")
+                    
+                    rename_info = {
+                        "enabled": True,
+                        "description": description,
+                        "include_original": self.rename_include_original,
+                        "date_type": self.rename_date_type,
+                        "date_format": self.rename_date_format
+                    }
+
             moved_path = self.mover.organize_by_category_with_date(
                 file_path, 
                 target_dir, 
                 category,
                 self.operation_mode,
                 self.time_source,
-                self.folder_structure
+                self.folder_structure,
+                rename_info=rename_info
             )
 
             if moved_path:
@@ -187,9 +293,55 @@ class MediaClassifier:
                 result["ai_result"] = raw_response
                 result["moved_to"] = moved_path
             else:
-                result["error"] = "文件移动/复制失败"
+                error_msg = "文件移动/复制失败"
+                result["error"] = error_msg
+                
+                # Export error file if enabled
+                if self.error_export_enabled:
+                    self._export_error_file(file_path, error_msg)
 
         except Exception as e:
-            result["error"] = str(e)
+            error_msg = str(e)
+            result["error"] = error_msg
+            
+            # Export error file if enabled
+            if self.error_export_enabled:
+                self._export_error_file(file_path, error_msg)
 
         return result
+
+    def _export_error_file(self, file_path: str, error_msg: str):
+        """导出错误文件到指定目录"""
+        try:
+            import shutil
+            
+            # 创建错误文件目录
+            error_dir = os.path.join(os.path.dirname(file_path), self.error_export_folder)
+            if not os.path.exists(error_dir):
+                os.makedirs(error_dir, exist_ok=True)
+            
+            # 构建目标路径
+            filename = os.path.basename(file_path)
+            dest_path = os.path.join(error_dir, filename)
+            
+            # 确保文件名唯一
+            counter = 1
+            name, ext = os.path.splitext(filename)
+            while os.path.exists(dest_path):
+                new_filename = f"{name}_{counter}{ext}"
+                dest_path = os.path.join(error_dir, new_filename)
+                counter += 1
+            
+            # 复制文件
+            shutil.copy2(file_path, dest_path)
+            
+            # 记录错误信息到日志文件
+            log_path = os.path.join(error_dir, "error_log.txt")
+            with open(log_path, "a", encoding="utf-8") as f:
+                f.write(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}]\n")
+                f.write(f"文件: {file_path}\n")
+                f.write(f"错误: {error_msg}\n")
+                f.write("-" * 50 + "\n")
+                
+        except Exception as export_error:
+            print(f"导出错误文件失败: {str(export_error)}")

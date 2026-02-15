@@ -17,7 +17,12 @@ from config import (
     DEFAULT_VIDEO_FRAME_MODE,
     DEFAULT_API_TYPE, DEFAULT_NETWORK_API_URL, DEFAULT_NETWORK_API_KEY,
     DEFAULT_NETWORK_API_MODEL, DEFAULT_NETWORK_API_MAX_CONCURRENT,
-    DEFAULT_NETWORK_API_MODELS
+    DEFAULT_NETWORK_API_MODELS,
+    DEFAULT_RENAME_ENABLED, DEFAULT_RENAME_PROMPT,
+    DEFAULT_RENAME_INCLUDE_ORIGINAL_NAME, DEFAULT_RENAME_DATE_TYPE,
+    DEFAULT_RENAME_DATE_FORMAT,
+    DEFAULT_RETRY_ENABLED, DEFAULT_RETRY_COUNT, DEFAULT_RETRY_DELAY,
+    DEFAULT_ERROR_EXPORT_ENABLED, DEFAULT_ERROR_EXPORT_FOLDER
 )
 from core.ollama_client import OllamaClient
 from core.network_client import NetworkClient
@@ -105,6 +110,37 @@ class SettingsDialog(QDialog):
         network_layout.addRow("模型:", self.network_api_model_combo)
         network_layout.addRow("最大并发数:", self.network_concurrent_spin)
         network_layout.addRow(test_layout)
+        
+        # Network Retry Settings
+        retry_group = QGroupBox("网络重试设置")
+        retry_layout = QFormLayout()
+        
+        self.retry_enabled_check = QCheckBox("启用网络错误重试")
+        self.retry_enabled_check.setChecked(self.settings.get("retry_enabled", DEFAULT_RETRY_ENABLED))
+        retry_layout.addRow(self.retry_enabled_check)
+        
+        self.retry_count_spin = QSpinBox()
+        self.retry_count_spin.setMinimum(1)
+        self.retry_count_spin.setMaximum(10)
+        self.retry_count_spin.setValue(self.settings.get("retry_count", DEFAULT_RETRY_COUNT))
+        retry_layout.addRow("重试次数:", self.retry_count_spin)
+        
+        self.retry_delay_spin = QSpinBox()
+        self.retry_delay_spin.setMinimum(1)
+        self.retry_delay_spin.setMaximum(30)
+        self.retry_delay_spin.setSuffix(" 秒")
+        self.retry_delay_spin.setValue(self.settings.get("retry_delay", DEFAULT_RETRY_DELAY))
+        retry_layout.addRow("重试延迟:", self.retry_delay_spin)
+        
+        self.error_export_check = QCheckBox("启用错误文件导出")
+        self.error_export_check.setChecked(self.settings.get("error_export_enabled", DEFAULT_ERROR_EXPORT_ENABLED))
+        retry_layout.addRow(self.error_export_check)
+        
+        self.error_export_folder_edit = QLineEdit(self.settings.get("error_export_folder", DEFAULT_ERROR_EXPORT_FOLDER))
+        retry_layout.addRow("错误文件目录:", self.error_export_folder_edit)
+        
+        retry_group.setLayout(retry_layout)
+        network_layout.addRow(retry_group)
         
         network_group.setLayout(network_layout)
 
@@ -214,9 +250,49 @@ class SettingsDialog(QDialog):
         categories_layout.addWidget(categories_group)
         categories_layout.addWidget(prompt_group)
 
+        # Rename Settings Tab
+        rename_tab = QWidget()
+        rename_layout = QVBoxLayout(rename_tab)
+
+        rename_group = QGroupBox("重命名设置")
+        rename_form_layout = QFormLayout()
+
+        self.rename_enabled_check = QCheckBox("启用文件重命名功能")
+        self.rename_enabled_check.setChecked(self.settings.get("rename_enabled", DEFAULT_RENAME_ENABLED))
+        rename_form_layout.addRow(self.rename_enabled_check)
+
+        self.rename_prompt_edit = QTextEdit()
+        self.rename_prompt_edit.setPlainText(self.settings.get("rename_prompt", DEFAULT_RENAME_PROMPT))
+        self.rename_prompt_edit.setPlaceholderText("为图片生成简短描述的提示词")
+        rename_form_layout.addRow("重命名提示词:", self.rename_prompt_edit)
+
+        self.rename_include_original_check = QCheckBox("包含原始文件名")
+        self.rename_include_original_check.setChecked(self.settings.get("rename_include_original_name", DEFAULT_RENAME_INCLUDE_ORIGINAL_NAME))
+        rename_form_layout.addRow(self.rename_include_original_check)
+
+        self.rename_date_combo = QComboBox()
+        self.rename_date_combo.addItem("不包含日期", "none")
+        self.rename_date_combo.addItem("创建日期", "create")
+        self.rename_date_combo.addItem("修改日期", "modify")
+        self.rename_date_combo.addItem("访问日期", "access")
+        date_type = self.settings.get("rename_date_type", DEFAULT_RENAME_DATE_TYPE)
+        date_index = self.rename_date_combo.findData(date_type)
+        if date_index >= 0:
+            self.rename_date_combo.setCurrentIndex(date_index)
+        rename_form_layout.addRow("日期类型:", self.rename_date_combo)
+
+        self.rename_date_format_edit = QLineEdit(self.settings.get("rename_date_format", DEFAULT_RENAME_DATE_FORMAT))
+        self.rename_date_format_edit.setPlaceholderText("例如: %Y%m%d")
+        rename_form_layout.addRow("日期格式:", self.rename_date_format_edit)
+
+        rename_group.setLayout(rename_form_layout)
+        rename_layout.addWidget(rename_group)
+        rename_layout.addStretch()
+
         tab_widget.addTab(general_tab, "常规")
         tab_widget.addTab(media_tab, "媒体")
         tab_widget.addTab(categories_tab, "分类")
+        tab_widget.addTab(rename_tab, "重命名")
 
         button_layout = QHBoxLayout()
         self.reset_btn = QPushButton("重置默认")
@@ -342,6 +418,13 @@ class SettingsDialog(QDialog):
             self.network_api_model_combo.setCurrentText(defaults["network_api_model"])
             self.network_concurrent_spin.setValue(defaults["network_api_max_concurrent"])
             
+            # Network Retry Settings
+            self.retry_enabled_check.setChecked(defaults["retry_enabled"])
+            self.retry_count_spin.setValue(defaults["retry_count"])
+            self.retry_delay_spin.setValue(defaults["retry_delay"])
+            self.error_export_check.setChecked(defaults["error_export_enabled"])
+            self.error_export_folder_edit.setText(defaults["error_export_folder"])
+            
             # Video Settings
             self.video_frame_spin.setValue(defaults["video_frame_count"])
             fm_index = self.video_frame_mode_combo.findData(defaults["video_frame_mode"])
@@ -368,6 +451,15 @@ class SettingsDialog(QDialog):
             # Categories and Prompt
             self.categories_edit.setPlainText("\n".join(defaults["categories"]))
             self.prompt_edit.setPlainText(defaults["prompt"])
+            
+            # Rename Settings
+            self.rename_enabled_check.setChecked(defaults["rename_enabled"])
+            self.rename_prompt_edit.setPlainText(defaults["rename_prompt"])
+            self.rename_include_original_check.setChecked(defaults["rename_include_original_name"])
+            date_index = self.rename_date_combo.findData(defaults["rename_date_type"])
+            if date_index >= 0:
+                self.rename_date_combo.setCurrentIndex(date_index)
+            self.rename_date_format_edit.setText(defaults["rename_date_format"])
 
     def get_settings(self):
         categories_text = self.categories_edit.toPlainText()
@@ -395,7 +487,19 @@ class SettingsDialog(QDialog):
             "time_source": self.time_source_combo.currentData(),
             "folder_structure": self.folder_structure_combo.currentData(),
             "process_images": self.process_images_check.isChecked(),
-            "process_videos": self.process_videos_check.isChecked()
+            "process_videos": self.process_videos_check.isChecked(),
+            # Rename settings
+            "rename_enabled": self.rename_enabled_check.isChecked(),
+            "rename_prompt": self.rename_prompt_edit.toPlainText(),
+            "rename_include_original_name": self.rename_include_original_check.isChecked(),
+            "rename_date_type": self.rename_date_combo.currentData(),
+            "rename_date_format": self.rename_date_format_edit.text().strip(),
+            # Network retry settings
+            "retry_enabled": self.retry_enabled_check.isChecked(),
+            "retry_count": self.retry_count_spin.value(),
+            "retry_delay": self.retry_delay_spin.value(),
+            "error_export_enabled": self.error_export_check.isChecked(),
+            "error_export_folder": self.error_export_folder_edit.text().strip()
         }
 
     def accept(self):

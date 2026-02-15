@@ -15,6 +15,28 @@
 - 🔄 **网络错误重试** - 自动重试网络错误，提高成功率
 - ❌ **错误文件导出** - 自动将处理失败的文件导出到指定目录
 
+## 效果展示
+
+### 运行界面
+
+![运行界面](doc/运行图.png)
+
+### 设置页面
+
+![设置页面1](doc/设置页面1.png)
+
+![设置页面2](doc/设置页面2.png)
+
+### 整理效果
+
+#### 整理前
+
+![整理前](doc/整理前.png)
+
+#### 整理后
+
+![整理后](doc/整理后.png)
+
 ## 安装
 
 > ⚠️ **注意事项**
@@ -120,10 +142,16 @@ venv/bin/python main.py
 │   ├── network_client.py # 网络 API 客户端
 │   ├── siliconflow_client.py # 硅基流动客户端
 │   └── ollama_client.py # Ollama 客户端
-└── ui/                  # 界面模块
-    ├── main_window.py   # 主窗口
-    ├── settings_dialog.py # 设置对话框
-    └── worker.py        # 工作线程
+├── ui/                  # 界面模块
+│   ├── main_window.py   # 主窗口
+│   ├── settings_dialog.py # 设置对话框
+│   └── worker.py        # 工作线程
+└── doc/                 # 文档和截图
+    ├── 运行图.png        # 运行界面截图
+    ├── 设置页面1.png     # 设置页面截图
+    ├── 设置页面2.png     # 设置页面截图
+    ├── 整理前.png        # 整理前效果
+    └── 整理后.png        # 整理后效果
 ```
 
 ## 依赖

@@ -27,8 +27,14 @@ class MediaClassifier:
         network_api_url: str = DEFAULT_NETWORK_API_URL,
         network_api_key: str = DEFAULT_NETWORK_API_KEY,
         network_api_model: str = DEFAULT_NETWORK_API_MODEL,
+        network_api_models: List[str] = None,
+        network_api_round_robin: bool = True,
+        network_api_model_max_concurrent: int = 2,
         categories: List[str] = None,
         prompt_template: str = None,
+        video_prompt_template: str = None,
+        image_structured_output_prompt: str = None,
+        video_structured_output_prompt: str = None,
         operation_mode: str = DEFAULT_OPERATION_MODE,
         video_frame_count: int = DEFAULT_VIDEO_FRAME_COUNT,
         video_frame_mode: str = DEFAULT_VIDEO_FRAME_MODE,
@@ -37,6 +43,7 @@ class MediaClassifier:
         # Rename settings
         rename_enabled: bool = False,
         rename_prompt: str = None,
+        video_rename_prompt: str = None,
         rename_include_original: bool = False,
         rename_date_type: str = "none",
         rename_date_format: str = "%Y%m%d",
@@ -44,6 +51,7 @@ class MediaClassifier:
         retry_enabled: bool = True,
         retry_count: int = 3,
         retry_delay: int = 2,
+        request_timeout: int = 180,
         error_export_enabled: bool = True,
         error_export_folder: str = "error_files"
     ):
@@ -62,12 +70,19 @@ class MediaClassifier:
             url=network_api_url,
             api_key=network_api_key,
             model=network_api_model,
+            models=network_api_models,
             categories=categories,
             prompt_template=prompt_template,
+            video_prompt_template=video_prompt_template,
             # Retry settings
             retry_enabled=retry_enabled,
             retry_count=retry_count,
-            retry_delay=retry_delay
+            retry_delay=retry_delay,
+            request_timeout=request_timeout,
+            # Round robin settings
+            round_robin=network_api_round_robin,
+            # Model concurrency settings
+            model_max_concurrent=network_api_model_max_concurrent
         )
         
         self.api_type = api_type
@@ -76,13 +91,19 @@ class MediaClassifier:
         self.network_api_url = network_api_url
         self.network_api_key = network_api_key
         self.network_api_model = network_api_model
+        self.categories = categories or CATEGORIES
         
         # Rename settings
         self.rename_enabled = rename_enabled
         self.rename_prompt = rename_prompt
+        self.video_rename_prompt = video_rename_prompt
         self.rename_include_original = rename_include_original
         self.rename_date_type = rename_date_type
         self.rename_date_format = rename_date_format
+        
+        # Structured output prompts
+        self.image_structured_output_prompt = image_structured_output_prompt or ""
+        self.video_structured_output_prompt = video_structured_output_prompt or ""
         
         # Network retry and error export settings
         self.retry_enabled = retry_enabled
@@ -107,8 +128,14 @@ class MediaClassifier:
         network_api_url: str = None,
         network_api_key: str = None,
         network_api_model: str = None,
+        network_api_models: List[str] = None,
+        network_api_round_robin: bool = None,
+        network_api_model_max_concurrent: int = None,
         categories: List[str] = None,
         prompt_template: str = None,
+        video_prompt_template: str = None,
+        image_structured_output_prompt: str = None,
+        video_structured_output_prompt: str = None,
         operation_mode: str = None,
         video_frame_count: int = None,
         video_frame_mode: str = None,
@@ -117,6 +144,7 @@ class MediaClassifier:
         # Rename settings
         rename_enabled: bool = None,
         rename_prompt: str = None,
+        video_rename_prompt: str = None,
         rename_include_original: bool = None,
         rename_date_type: str = None,
         rename_date_format: str = None,
@@ -124,6 +152,7 @@ class MediaClassifier:
         retry_enabled: bool = None,
         retry_count: int = None,
         retry_delay: int = None,
+        request_timeout: int = None,
         error_export_enabled: bool = None,
         error_export_folder: str = None
     ):
@@ -144,12 +173,24 @@ class MediaClassifier:
         if network_api_model:
             self.network.set_model(network_api_model)
             self.network_api_model = network_api_model
+        if network_api_models:
+            self.network.set_models(network_api_models)
+        if network_api_round_robin is not None:
+            self.network.round_robin = network_api_round_robin
+        if network_api_model_max_concurrent is not None:
+            self.network.model_max_concurrent = network_api_model_max_concurrent
         if categories:
             self.ollama.set_categories(categories)
             self.network.set_categories(categories)
         if prompt_template:
             self.ollama.set_prompt_template(prompt_template)
             self.network.set_prompt_template(prompt_template)
+        if video_prompt_template:
+            self.network.video_prompt_template = video_prompt_template
+        if image_structured_output_prompt is not None:
+            self.image_structured_output_prompt = image_structured_output_prompt
+        if video_structured_output_prompt is not None:
+            self.video_structured_output_prompt = video_structured_output_prompt
         if operation_mode:
             self.operation_mode = operation_mode
         if video_frame_count:
@@ -167,6 +208,8 @@ class MediaClassifier:
             self.rename_enabled = rename_enabled
         if rename_prompt:
             self.rename_prompt = rename_prompt
+        if video_rename_prompt:
+            self.video_rename_prompt = video_rename_prompt
         if rename_include_original is not None:
             self.rename_include_original = rename_include_original
         if rename_date_type:
@@ -183,6 +226,8 @@ class MediaClassifier:
         if retry_delay is not None:
             self.retry_delay = retry_delay
             self.network.retry_delay = retry_delay
+        if request_timeout is not None:
+            self.network.request_timeout = request_timeout
         if error_export_enabled is not None:
             self.error_export_enabled = error_export_enabled
         if error_export_folder:
@@ -224,7 +269,29 @@ class MediaClassifier:
 
             # Use the appropriate AI client based on api_type
             if self.api_type == "network":
-                ai_response = self.network.analyze_image(base64_img)
+                if is_video:
+                    custom_structured_output = self.video_structured_output_prompt
+                    current_rename_prompt = self.video_rename_prompt
+                else:
+                    custom_structured_output = self.image_structured_output_prompt
+                    current_rename_prompt = self.rename_prompt
+                
+                if custom_structured_output:
+                    structured_output_prompt = custom_structured_output
+                elif self.rename_enabled:
+                    structured_output_prompt = """- 只返回JSON格式，格式如下：{"category": "类别名称", "description": "简短描述"}
+- 类别必须且只能从指定列表中选择。
+- 描述要简洁明了，突出图片核心内容。
+- 不要包含任何其他文字或标点符号。
+- 不要使用markdown代码块格式（不要使用```标记）。
+- 直接返回纯JSON文本，不要任何格式化。"""
+                else:
+                    structured_output_prompt = """- 只返回JSON格式，格式如下：{"category": "类别名称"}
+- 类别必须且只能从指定列表中选择。
+- 不要包含任何其他文字或标点符号。
+- 不要使用markdown代码块格式（不要使用```标记）。
+- 直接返回纯JSON文本，不要任何格式化。"""
+                ai_response = self.network.analyze_image(base64_img, is_video, structured_output_prompt, current_rename_prompt)
             else:
                 ai_response = self.ollama.analyze_image(base64_img)
 
@@ -234,43 +301,42 @@ class MediaClassifier:
 
             category = ai_response.get("category", "其他")
             raw_response = ai_response.get("raw_response", "")
-
-            # Rename functionality
+            
+            # Extract description from JSON response if rename is enabled
+            description = None
+            if self.rename_enabled and ai_response.get("success"):
+                try:
+                    import json
+                    response_text = ai_response.get("raw_response", "")
+                    if response_text:
+                        # 清理响应文本，移除markdown代码块标记
+                        cleaned_text = self._clean_json_response(response_text)
+                        
+                        # 尝试解析JSON
+                        parsed = json.loads(cleaned_text)
+                        description = parsed.get("description", "")
+                        if description:
+                            print(f"成功解析JSON描述: {description}")
+                except json.JSONDecodeError as e:
+                    print(f"JSON解析失败: {e}")
+                    print(f"原始响应内容: {response_text[:500]}...")
+                    # 如果JSON解析失败，尝试从响应中提取描述
+                    description = self._extract_description_from_text(response_text)
+                except Exception as e:
+                    print(f"处理响应时发生异常: {e}")
+                    print(f"原始响应内容: {response_text[:500]}...")
+                    description = self._extract_description_from_text(response_text)
+            
+            # Build rename_info if description is available
             rename_info = None
-            if self.rename_enabled and self.rename_prompt:
-                # Generate file description using AI
-                if self.api_type == "network":
-                    # Create a temporary network client with rename prompt
-                    rename_client = NetworkClient(
-                        url=self.network_api_url,
-                        api_key=self.network_api_key,
-                        model=self.network_api_model,
-                        prompt_template=self.rename_prompt
-                    )
-                    rename_response = rename_client.analyze_image(base64_img)
-                else:
-                    # Create a temporary ollama client with rename prompt
-                    rename_client = OllamaClient(
-                        url=self.ollama_url,
-                        model=self.ollama_model,
-                        prompt_template=self.rename_prompt
-                    )
-                    rename_response = rename_client.analyze_image(base64_img)
-
-                if rename_response and rename_response.get("success"):
-                    description = rename_response.get("raw_response", "").strip()
-                    # 清理描述，确保简短
-                    description = description[:30]  # 限制长度
-                    # 清理非法字符
-                    description = "".join(c for c in description if c.isalnum() or c in "_-")
-                    
-                    rename_info = {
-                        "enabled": True,
-                        "description": description,
-                        "include_original": self.rename_include_original,
-                        "date_type": self.rename_date_type,
-                        "date_format": self.rename_date_format
-                    }
+            if description:
+                rename_info = {
+                    "enabled": True,
+                    "description": description,
+                    "include_original": self.rename_include_original,
+                    "date_type": self.rename_date_type,
+                    "date_format": self.rename_date_format
+                }
 
             moved_path = self.mover.organize_by_category_with_date(
                 file_path, 
@@ -302,6 +368,7 @@ class MediaClassifier:
 
         except Exception as e:
             error_msg = str(e)
+            print(f"处理文件时发生异常: {file_path}, 错误: {error_msg}")
             result["error"] = error_msg
             
             # Export error file if enabled
@@ -309,6 +376,70 @@ class MediaClassifier:
                 self._export_error_file(file_path, error_msg)
 
         return result
+
+    def _clean_json_response(self, text: str) -> str:
+        """清理JSON响应，移除markdown代码块标记和其他干扰"""
+        try:
+            import re
+            
+            # 移除markdown代码块标记 ```json ... ```
+            text = re.sub(r'```json\s*', '', text)
+            text = re.sub(r'```\s*$', '', text)
+            
+            # 移除其他markdown代码块标记 ``` ... ```
+            text = re.sub(r'```\s*', '', text)
+            
+            # 移除开头和结尾的空白字符
+            text = text.strip()
+            
+            # 移除可能的前导和尾随引号（如果整个JSON被包裹在引号中）
+            if text.startswith('"') and text.endswith('"'):
+                text = text[1:-1]
+            
+            return text
+        except Exception as e:
+            print(f"清理JSON响应时发生异常: {e}")
+            return text
+
+    def _extract_description_from_text(self, text: str) -> str:
+        """从非JSON格式的文本中提取描述"""
+        try:
+            import re
+            
+            # 首先尝试清理文本
+            cleaned_text = self._clean_json_response(text)
+            
+            # 尝试直接从清理后的文本中提取JSON
+            try:
+                import json
+                parsed = json.loads(cleaned_text)
+                description = parsed.get("description", "")
+                if description:
+                    print(f"从清理后的文本中成功提取JSON描述: {description}")
+                    return description[:20]
+            except:
+                pass
+            
+            # 尝试提取引号中的内容
+            matches = re.findall(r'["\']([^"\']+)["\']', cleaned_text)
+            if matches:
+                # 返回第一个匹配项，且长度不超过20个字符
+                for match in matches:
+                    if len(match) <= 30 and match not in self.categories:
+                        return match[:20]
+            
+            # 如果没有找到，尝试提取中文描述
+            # 查找连续的中文字符
+            chinese_matches = re.findall(r'[\u4e00-\u9fa5]{2,10}', cleaned_text)
+            if chinese_matches:
+                return chinese_matches[0][:20]
+            
+            # 如果还是没有，返回前20个非空字符
+            cleaned = ''.join(char for char in cleaned_text if not char.isspace())
+            return cleaned[:20] if cleaned else ""
+        except Exception as e:
+            print(f"提取描述时发生异常: {e}")
+            return ""
 
     def _export_error_file(self, file_path: str, error_msg: str):
         """导出错误文件到指定目录"""

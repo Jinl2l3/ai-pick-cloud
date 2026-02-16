@@ -184,7 +184,8 @@ class MainWindow(QMainWindow):
         dialog = SettingsDialog(self)
         if dialog.exec() == QDialog.Accepted:
             self.settings = dialog.get_settings()
-            self.append_log("设置已更新")
+            save_settings(self.settings)  # 保存设置到配置文件
+            self.append_log("设置已更新并保存")
 
     def check_ollama_status(self):
         try:

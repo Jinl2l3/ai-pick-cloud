@@ -19,6 +19,7 @@ from config import (
     DEFAULT_RENAME_INCLUDE_ORIGINAL_NAME, DEFAULT_RENAME_DATE_TYPE,
     DEFAULT_RENAME_DATE_FORMAT,
     DEFAULT_RETRY_ENABLED, DEFAULT_RETRY_COUNT, DEFAULT_RETRY_DELAY,
+    DEFAULT_REQUEST_TIMEOUT,
     DEFAULT_ERROR_EXPORT_ENABLED, DEFAULT_ERROR_EXPORT_FOLDER
 )
 
@@ -54,6 +55,8 @@ class MediaProcessorWorker(QThread):
         self.network_api_url = self.settings.get("network_api_url")
         self.network_api_key = self.settings.get("network_api_key")
         self.network_api_model = self.settings.get("network_api_model")
+        self.network_api_models = self.settings.get("available_network_models")
+        self.network_api_round_robin = self.settings.get("network_api_round_robin", True)
         
         # Determine max concurrent based on API type
         if self.api_type == "network":
@@ -63,6 +66,9 @@ class MediaProcessorWorker(QThread):
         
         self.categories = self.settings.get("categories")
         self.prompt_template = self.settings.get("prompt")
+        self.video_prompt_template = self.settings.get("video_prompt")
+        self.image_structured_output_prompt = self.settings.get("image_structured_output_prompt", "")
+        self.video_structured_output_prompt = self.settings.get("video_structured_output_prompt", "")
         self.operation_mode = self.settings.get("operation_mode", DEFAULT_OPERATION_MODE)
         self.video_frame_count = self.settings.get("video_frame_count", DEFAULT_VIDEO_FRAME_COUNT)
         self.video_frame_mode = self.settings.get("video_frame_mode", DEFAULT_VIDEO_FRAME_MODE)
@@ -74,6 +80,7 @@ class MediaProcessorWorker(QThread):
         # Rename settings
         self.rename_enabled = self.settings.get("rename_enabled", DEFAULT_RENAME_ENABLED)
         self.rename_prompt = self.settings.get("rename_prompt", DEFAULT_RENAME_PROMPT)
+        self.video_rename_prompt = self.settings.get("video_rename_prompt", DEFAULT_VIDEO_RENAME_PROMPT)
         self.rename_include_original = self.settings.get("rename_include_original_name", DEFAULT_RENAME_INCLUDE_ORIGINAL_NAME)
         self.rename_date_type = self.settings.get("rename_date_type", DEFAULT_RENAME_DATE_TYPE)
         self.rename_date_format = self.settings.get("rename_date_format", DEFAULT_RENAME_DATE_FORMAT)
@@ -82,8 +89,12 @@ class MediaProcessorWorker(QThread):
         self.retry_enabled = self.settings.get("retry_enabled", DEFAULT_RETRY_ENABLED)
         self.retry_count = self.settings.get("retry_count", DEFAULT_RETRY_COUNT)
         self.retry_delay = self.settings.get("retry_delay", DEFAULT_RETRY_DELAY)
+        self.request_timeout = self.settings.get("request_timeout", DEFAULT_REQUEST_TIMEOUT)
         self.error_export_enabled = self.settings.get("error_export_enabled", DEFAULT_ERROR_EXPORT_ENABLED)
         self.error_export_folder = self.settings.get("error_export_folder", DEFAULT_ERROR_EXPORT_FOLDER)
+        
+        # Get model max concurrent setting
+        self.network_api_model_max_concurrent = self.settings.get("network_api_model_max_concurrent", 2)
         
         self.base_classifier = MediaClassifier(
             api_type=self.api_type,
@@ -92,8 +103,14 @@ class MediaProcessorWorker(QThread):
             network_api_url=self.network_api_url,
             network_api_key=self.network_api_key,
             network_api_model=self.network_api_model,
+            network_api_models=self.network_api_models,
+            network_api_round_robin=self.network_api_round_robin,
+            network_api_model_max_concurrent=self.network_api_model_max_concurrent,
             categories=self.categories,
             prompt_template=self.prompt_template,
+            video_prompt_template=self.video_prompt_template,
+            image_structured_output_prompt=self.image_structured_output_prompt,
+            video_structured_output_prompt=self.video_structured_output_prompt,
             operation_mode=self.operation_mode,
             video_frame_count=self.video_frame_count,
             video_frame_mode=self.video_frame_mode,
@@ -102,6 +119,7 @@ class MediaProcessorWorker(QThread):
             # Rename settings
             rename_enabled=self.rename_enabled,
             rename_prompt=self.rename_prompt,
+            video_rename_prompt=self.video_rename_prompt,
             rename_include_original=self.rename_include_original,
             rename_date_type=self.rename_date_type,
             rename_date_format=self.rename_date_format,
@@ -109,6 +127,7 @@ class MediaProcessorWorker(QThread):
             retry_enabled=self.retry_enabled,
             retry_count=self.retry_count,
             retry_delay=self.retry_delay,
+            request_timeout=self.request_timeout,
             error_export_enabled=self.error_export_enabled,
             error_export_folder=self.error_export_folder
         )
@@ -139,44 +158,19 @@ class MediaProcessorWorker(QThread):
                 )
                 if img:
                     self.preview_image.emit(img)
-            except Exception:
-                pass
+            except Exception as e:
+                self.log_message.emit(f"  警告: 预览处理失败 - {str(e)}")
 
-            classifier = MediaClassifier(
-                api_type=self.api_type,
-                ollama_url=self.ollama_url,
-                ollama_model=self.ollama_model,
-                network_api_url=self.network_api_url,
-                network_api_key=self.network_api_key,
-                network_api_model=self.network_api_model,
-                categories=self.categories,
-                prompt_template=self.prompt_template,
-                operation_mode=self.operation_mode,
-                video_frame_count=self.video_frame_count,
-                video_frame_mode=self.video_frame_mode,
-                time_source=self.time_source,
-                folder_structure=self.folder_structure,
-                # Rename settings
-                rename_enabled=self.rename_enabled,
-                rename_prompt=self.rename_prompt,
-                rename_include_original=self.rename_include_original,
-                rename_date_type=self.rename_date_type,
-                rename_date_format=self.rename_date_format,
-                # Network retry and error export settings
-                retry_enabled=self.retry_enabled,
-                retry_count=self.retry_count,
-                retry_delay=self.retry_delay,
-                error_export_enabled=self.error_export_enabled,
-                error_export_folder=self.error_export_folder
-            )
-            result = classifier.process_single_file(file_path, self.target_dir)
+            result = self.base_classifier.process_single_file(file_path, self.target_dir)
             return result
 
         except Exception as e:
+            error_msg = str(e)
+            self.log_message.emit(f"  错误: 处理异常 - {error_msg}")
             return {
                 "success": False,
                 "file_path": file_path,
-                "error": str(e)
+                "error": error_msg
             }
 
     def run(self):
